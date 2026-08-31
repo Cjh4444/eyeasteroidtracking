@@ -10,7 +10,10 @@
 # NEVER deletes the two things that cannot be regenerated without redoing an
 # interactive session by hand:
 #
-#   out_track/asteroid_track.csv, asteroid_seeds.csv   <- track_live.py, supervised
+#   out_track/asteroid_track.csv          <- track_live.py, supervised
+#   out_track/asteroid_seeds.csv          <- legacy, from the retired batch seeder;
+#                                            nothing reads it now, kept only because
+#                                            no tool can rebuild it
 #   out_frame_annotate_method/corners.csv              <- annotate_corners.py
 #
 # Those are the actual work. Everything else is a pure function of them plus the

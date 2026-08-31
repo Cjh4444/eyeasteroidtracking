@@ -39,8 +39,8 @@ and the recipient regenerates the pictures themselves.
 ```
 
 It **refuses to touch** the two artefacts that came from an interactive session and
-cannot be rebuilt — `out_track/asteroid_track.csv` and `asteroid_seeds.csv` from
-`track_live.py`, plus `out_frame_annotate_method/corners.csv` from method 1's
+cannot be rebuilt — `out_track/asteroid_track.csv` from `track_live.py`, plus
+`out_frame_annotate_method/corners.csv` from method 1's
 `annotate_corners.py`. If any of them is already missing it aborts rather than
 deleting things it could not restore. Verified by a full clean-and-rebuild round trip:
 3.23° median error, −195 ms anticipation, 0.84-unit residual, all 129 figures.
@@ -51,7 +51,7 @@ deleting things it could not restore. Verified by a full clean-and-rebuild round
 |---|---|---|---|
 | **S1** | `build_timeline.py` | MATLAB epoch CSVs → absolute UTC ns; derives the 41 rest windows as `next_epoch_start − 3 s − REST_DURATION` | `out_track/timeline.csv`, `rest_windows.csv` |
 | **S2** | `sync.py` | Gaze-vs-stimulus offset by cross-correlation. **Diagnostic only** — confounded with pursuit lag (trap 9) | `out_track/sync_per_epoch.csv`, `sync.json` |
-| **T1** | `track_live.py` *(interactive)* | Play each epoch, watch the box follow the asteroid, pause/rewind/re-seed where it drifts. Auto-pauses on low confidence or a parked box. **Already done — output is committed** | `out_track/asteroid_track.csv`, `asteroid_seeds.csv` |
+| **T1** | `track_live.py` *(interactive)* | Play each epoch, watch the box follow the asteroid, pause/rewind/re-seed where it drifts. Auto-pauses on low confidence or a parked box. **Already done — output is committed** | `out_track/asteroid_track.csv` |
 | **S3** | `fit_from_track.py` | **A.** Undistort both, interpolate the asteroid (30 Hz) onto each gaze timestamp (200 Hz), take `gaze_px − ast_px`, convert to degrees. **B.** Solve the per-epoch clock offset by sweeping it for minimum homography reprojection residual, rejecting y-flipped fits. **C.** Fit the drift line across epochs, re-solve each in a narrow window around it. **D.** Per-epoch homography from tracked pixels ↔ MATLAB game coords — the asteroid is a moving calibration target sweeping the screen — and map gaze through it | `out_track/gaze_vs_asteroid.csv`, `gaze_mapped.csv`, `track_mapping_report.csv`, `pursuit_lag.csv` |
 | **S4** | `plot.py` | 129 figures: per-epoch Y overlay, X overlay, 2D scanpath, plus contact sheets. Applies the per-epoch offset to gaze timestamps | `out_track/figures/` |
 
@@ -102,7 +102,6 @@ common.py               shared paths, game geometry from Lunar_Blast_v4.m
 build_timeline.py       S1
 sync.py                 S2
 track_live.py           T1  (interactive, supervised)
-track_asteroid.py       T1's template-matching core
 fit_mapping.py          camera intrinsics + undistortion, shared with method 1
 fit_from_track.py       S3
 plot.py                 S4

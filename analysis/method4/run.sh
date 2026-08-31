@@ -47,7 +47,7 @@ for d in out_track out_frame_annotate_method; do
 done
 
 $PY fit_hybrid2.py             # H1  differential map, J from rest corners
-$PY plot.py                    # H2  129 figures
+$PY plot.py                    # H2  86 figures
 echo "done -- figures in analysis/method4/$LB_OUT/figures/"
 echo
 echo "score it with:                 $PY compare_differential.py"

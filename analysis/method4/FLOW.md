@@ -50,7 +50,7 @@ and the recipient regenerates the pictures themselves.
 ```bash
 ./clean.sh            # show the plan, confirm, delete
 ./clean.sh --deep     # also the two 4 MB timeline.csv copies  (43 MB -> 1.4 MB)
-./clean.sh --figures  # only the 129 figures
+./clean.sh --figures  # only the 86 figures
 ./clean.sh -n         # dry run
 ./run.sh              # get it all back
 ```
@@ -62,7 +62,7 @@ flow consumes both as *inputs* and has no way to regenerate them, so the guard m
 more here; if either is already missing, `clean.sh` aborts. `--deep` is safe because
 `run.sh` rebuilds the timelines from the MATLAB logs when it finds them absent.
 Verified by a full `--deep` clean-and-rebuild round trip: 110,257 samples, 93.4 % in
-the game area, anisotropy 1.027 median / 1.076 max / 0-of-42 rejected, all 129 figures.
+the game area, anisotropy 1.027 median / 1.076 max / 0-of-42 rejected, all 86 figures.
 
 Note that `corners.csv` and `asteroid_track.csv` are also duplicated in
 [`../method2/`](../method2/) and in [`../`](..) itself — three copies of the only
@@ -78,7 +78,7 @@ folder, so `run.sh` is fully non-interactive.
 | **U1** | *(method 1)* `annotate_corners.py` *(interactive)* | Click the gray rest rectangle's four corners at each of the 41 rests | → `out_frame_annotate_method/corners.csv` |
 | **U2** | *(method 2)* `track_live.py` *(interactive)* | Supervised asteroid tracking in raw scene pixels | → `out_track/asteroid_track.csv` |
 | **H1** | `fit_hybrid2.py` | Interpolate the rest-corner quads onto each tracked frame's timestamp and rebuild `H` per frame; compute `J` at the asteroid's pixel position; reject the epoch if `J`'s anisotropy exceeds `ANISOTROPY_MAX` (1.15); interpolate `J`'s four entries onto the 200 Hz gaze clock (`J` varies slowly — 1.5 % median change between consecutive rests — so this is far cheaper than a homography per gaze sample and just as accurate); then `gaze_game = MATLAB asteroid path + J · measured pixel offset` | → `out_hybrid2/gaze_mapped.csv`, `jacobian_report.csv` |
-| **H2** | `plot.py` | 129 figures: per-epoch Y overlay, X overlay, 2D scanpath, plus contact sheets | → `out_hybrid2/figures/` |
+| **H2** | `plot.py` | 86 figures: per-epoch Y overlay, X overlay, plus two contact sheets | → `out_hybrid2/figures/` |
 
 `run.sh` runs H1 → H2.
 
@@ -211,7 +211,6 @@ compare_differential.py     scoring, methods 2 / 3 / 4
   supporting (imported, or needed to regenerate the upstream inputs)
 annotate_corners.py         U1, interactive
 track_live.py               U2, interactive
-track_asteroid.py           U2's template-matching core
 build_timeline.py           needed by U1 / U2
 sync.py                     needed by U1 / U2; also supplies load_gaze()
 fit_mapping.py              camera intrinsics + undistortion

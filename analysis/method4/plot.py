@@ -1,9 +1,14 @@
 """Stage 5 -- the deliverables.
 
-Three views per epoch, all in game coordinates:
+Two views per epoch, both in game coordinates:
   (a) Y overlay   Asteroid_Y(t) vs gaze vertical position   -- the sample_graph.png view
   (b) X overlay   Asteroid_X(t) vs gaze horizontal position -- doubles as a mapping check
-  (c) scanpath    the [0,100]x[0,65] game area with both paths drawn on it
+
+The 2D scanpath view is deliberately not produced: it collapses the whole trial
+onto one picture, so any residual clock offset between the gaze and stimulus
+clocks shows up as a spatial smear that cannot be told apart from real tracking
+error. Until the sync is trustworthy, the time-series overlays -- where a timing
+error stays visibly a timing error -- are the only honest views.
 
 Both series in every overlay share one axis and one unit (game units), so there is
 no second y-scale anywhere. Gaze is broken (not interpolated) across blinks and
@@ -17,12 +22,8 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.patheffects as pe
-from matplotlib.collections import LineCollection
-from matplotlib.lines import Line2D
-from matplotlib.colors import LinearSegmentedColormap
 
-from common import (CROSS_XY, EPOCH_SUMMARY, GAME_XLIM, GAME_YLIM, OUT)
+from common import (EPOCH_SUMMARY, GAME_XLIM, GAME_YLIM, OUT)
 
 FIGS = OUT / "figures"
 
@@ -34,11 +35,6 @@ C_SURFACE = "#fcfcfb"
 C_INK = "#0b0b0b"
 C_INK2 = "#52514e"
 C_GRID = "#e3e2df"
-
-# Sequential ramp for scanpath time: ONE hue, light -> dark, and it is the GAZE
-# hue -- colour follows the entity, so gaze reads orange in every view and the
-# blue asteroid path stays legible where the scanpath crosses it.
-CMAP_TIME = LinearSegmentedColormap.from_list("oranges1", ["#f7d3c0", "#eb6834", "#8c3208"])
 
 
 def style():
@@ -118,42 +114,6 @@ def panel_overlay(ax, ep, stim, g, axis, compact=False):
         ax.legend(loc="upper right", ncols=2)
 
 
-def panel_scan(ax, ep, stim, g, compact=False):
-    """The game area seen from the front, with both paths on it."""
-    ax.add_patch(plt.Rectangle((GAME_XLIM[0], GAME_YLIM[0]),
-                               GAME_XLIM[1], GAME_YLIM[1],
-                               facecolor="#f3f2ef", edgecolor=C_GRID, lw=1.0, zorder=0))
-    v = g[g["valid"]] if len(g) else g
-    if len(v) > 1:
-        pts = np.c_[v["game_x"], v["game_y"]].reshape(-1, 1, 2)
-        segs = np.concatenate([pts[:-1], pts[1:]], axis=1)
-        # Drop segments that bridge a blink -- they are not real eye movements.
-        dt = np.diff(v["t"].to_numpy())
-        keep = dt < 0.15
-        lc = LineCollection(segs[keep], cmap=CMAP_TIME, lw=1.0, alpha=0.9, zorder=2)
-        lc.set_array(v["t"].to_numpy()[:-1][keep])
-        ax.add_collection(lc)
-
-    # Asteroid drawn last with a surface-coloured halo, so the reference path
-    # stays readable wherever the scanpath crosses it.
-    ax.plot(stim["Asteroid_X"], stim["Asteroid_Y"], color=C_AST, lw=2.4,
-            solid_capstyle="round", label="asteroid path", zorder=4,
-            path_effects=[pe.Stroke(linewidth=4.8, foreground=C_SURFACE), pe.Normal()])
-
-    ax.plot(*CROSS_XY, marker="+", color=C_INK2, ms=9, mew=1.2, zorder=4)
-    ax.set_xlim(GAME_XLIM[0] - 3, GAME_XLIM[1] + 3)
-    ax.set_ylim(GAME_YLIM[0] - 3, GAME_YLIM[1] + 3)
-    ax.set_aspect("equal")
-    ax.set_xticks([]); ax.set_yticks([])
-    for s in ax.spines.values():
-        s.set_visible(False)
-    if not compact:
-        ax.set_xlabel("gaze shaded light \u2192 dark over the 14 s trial")
-        ax.legend(handles=[Line2D([], [], color=C_AST, lw=2.4, label="asteroid path"),
-                           Line2D([], [], color=C_GAZE, lw=1.6, label="gaze")],
-                  loc="upper left", ncols=1, borderpad=0.9, labelspacing=0.6)
-
-
 def title_for(ep, meta, compact=False):
     s = f"epoch {ep}  ·  {meta['cond']}  ·  waveFreq {meta['freq']:.1f}"
     if not compact and meta.get("contact_pct") is not None:
@@ -191,7 +151,7 @@ def main() -> None:
     if wanted:
         eps = [e for e in eps if e in wanted]
 
-    panels = {"y": [], "x": [], "scan": []}
+    panels = {"y": [], "x": []}
     for ep in eps:
         d = timeline[timeline["EpochIndex"] == ep].sort_values("t_utc_ns")
         t0, t1 = d["t_utc_ns"].iloc[0], d["t_utc_ns"].iloc[-1]
@@ -203,14 +163,10 @@ def main() -> None:
                     if ep in per_sync.index else "")
         panels["y"].append((ep, stim, g, meta))
         panels["x"].append((ep, stim, g, meta))
-        panels["scan"].append((ep, stim, g, meta))
 
-        for kind in ("y", "x", "scan"):
-            fig, ax = plt.subplots(figsize=(9, 4.2) if kind != "scan" else (8.4, 6.0))
-            if kind == "scan":
-                panel_scan(ax, ep, stim, g)
-            else:
-                panel_overlay(ax, ep, stim, g, kind)
+        for kind in ("y", "x"):
+            fig, ax = plt.subplots(figsize=(9, 4.2))
+            panel_overlay(ax, ep, stim, g, kind)
             ax.set_title(title_for(ep, meta), loc="left", color=C_INK, pad=10)
             fig.tight_layout()
             fig.savefig(FIGS / f"epoch_{ep:02d}_{kind}.png", dpi=140)
@@ -218,23 +174,18 @@ def main() -> None:
         print(f"  epoch {ep:2d} ok ({len(g)} gaze samples)")
 
     # Contact sheets: 7 rows x 6 cols across all 42.
-    for kind in ("y", "x", "scan"):
+    for kind in ("y", "x"):
         nrow, ncol = 7, 6
-        fs = (22, 17) if kind == "scan" else (24, 18)
-        fig, axes = plt.subplots(nrow, ncol, figsize=fs)
+        fig, axes = plt.subplots(nrow, ncol, figsize=(24, 18))
         for ax in axes.ravel():
             ax.axis("off")
         for i, (ep, stim, g, meta) in enumerate(panels[kind]):
             ax = axes.ravel()[i]
             ax.axis("on")
-            if kind == "scan":
-                panel_scan(ax, ep, stim, g, compact=True)
-            else:
-                panel_overlay(ax, ep, stim, g, kind, compact=True)
+            panel_overlay(ax, ep, stim, g, kind, compact=True)
             ax.set_title(title_for(ep, meta, compact=True), loc="left",
                          fontsize=8, color=C_INK, pad=4)
-        label = {"y": "vertical position", "x": "horizontal position",
-                 "scan": "gaze scanpath over the game area"}[kind]
+        label = {"y": "vertical position", "x": "horizontal position"}[kind]
         fig.suptitle(f"Lunar Blast — asteroid vs gaze, {label}  (blue = asteroid, orange = gaze)",
                      fontsize=15, color=C_INK, x=0.01, ha="left")
         fig.tight_layout(rect=[0, 0, 1, 0.975])
@@ -242,7 +193,7 @@ def main() -> None:
         plt.close(fig)
         print(f"contact sheet: {kind}")
 
-    print(f"\nwrote {len(eps)*3 + 3} figures to {FIGS}")
+    print(f"\nwrote {len(eps)*2 + 2} figures to {FIGS}")
 
 
 if __name__ == "__main__":

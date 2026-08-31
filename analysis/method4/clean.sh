@@ -3,7 +3,7 @@
 # Remove everything ./run.sh can regenerate, so the flow can be shipped as code.
 #
 #   ./clean.sh              show the plan, ask, then delete this flow's output
-#   ./clean.sh --figures    only the 129 figures, keep the derived CSVs
+#   ./clean.sh --figures    only the 86 figures, keep the derived CSVs
 #   ./clean.sh --deep       also drop the two 4 MB timeline.csv copies; ./run.sh
 #                           rebuilds them from the MATLAB logs on next run
 #   ./clean.sh -n           dry run -- print the plan and stop

@@ -5,10 +5,12 @@ drifts you pause, rewind to the frame where it went wrong, redraw the box there,
 and continue -- the tracker re-seeds from your correction and everything after
 that frame is retracked.
 
-This beats fire-and-forget tracking because the failure modes are silent: a
-tracker stuck on static game art template-matches itself perfectly and reports
-score 1.00 every frame. Watching it is the only honest check, so the tool is
-built around watching it.
+This is the ONLY tracker in the flow, by choice. Fire-and-forget tracking was
+tried and retired: its failure modes are silent, because a tracker stuck on
+static game art template-matches itself perfectly and reports score 1.00 every
+frame. No automatic confidence measure catches that -- watching it is the only
+honest check, so the tool is built around watching it, and every frame in
+asteroid_track.csv has been seen by a person.
 
 It auto-pauses whenever confidence drops or the motion gate starts coasting, so
 you are only asked to look at the frames that actually need you.
@@ -50,18 +52,34 @@ quitting never loses work and re-running resumes at the first unfinished epoch.
 """
 import argparse
 import sys
+from pathlib import Path
 
 import cv2
 import numpy as np
 import pandas as pd
 
-from common import OUT, SCENE_VIDEO, WORLD_TS_CSV
-from track_asteroid import (DEFAULT_BOX, MAX_STEP_PX, MIN_SCORE, SEARCH_R,
-                            VEL_DAMP, make_tracker, propose_seeds, refine)
+from common import (AST_SPAWN_X, AST_SPAWN_Y, CORNER_GAME_XY, OUT, SCENE_VIDEO,
+                    WORLD_TS_CSV)
 
 TRACK_CSV = OUT / "asteroid_track.csv"
-SEEDS_CSV = OUT / "asteroid_seeds.csv"
 WIN = "supervised asteroid tracking"
+
+DISPLAY_SCALE = 0.75
+SEARCH_R = 40             # template search radius in px around the prediction
+MIN_SCORE = 0.35          # below this the frame is marked unreliable
+DEFAULT_BOX = 34          # px, ~2.5 game units diameter at the observed 5.7 px/unit
+
+# Physical limit on how far the asteroid can move between two 30 Hz frames.
+# Measured steps run to ~12 px on the waveFreq 3.5 epochs, so 30 px leaves room
+# for head motion on top while still stopping a lost tracker from running away
+# across the frame -- the dominant failure mode with a poor seed.
+#
+# NOTE this is measured from the PREVIOUS POSITION, never from the velocity
+# prediction. Gating on the prediction rejects the true match at every direction
+# reversal of the triangle wave (prediction points the wrong way, so the real
+# asteroid lands ~2x the step size away), which is what broke the fast epochs.
+MAX_STEP_PX = 30.0
+VEL_DAMP = 0.6            # velocity used to CENTRE THE SEARCH only, not to gate
 
 ALGOS = ("fast", "accurate", "blob")
 BG_SAMPLES = 48           # frames sampled to build the static-art background
@@ -72,11 +90,75 @@ BLOB_SMOOTH = 5           # px blur on the difference image before peak finding
 KEY_LEFT = {63234, 65361, 2424832, 81}
 KEY_RIGHT = {63235, 65363, 2555904, 83}
 
-DISPLAY_SCALE = 0.75
 TRAIL = 60                # frames of path history drawn behind the box
 STUCK_WIN = 45            # frames over which the asteroid must visibly move
 STUCK_PX = 8.0            # ...by at least this much, or the track is stuck
 JPEG_Q = 90               # frame cache quality; ~70 KB/frame at 1600x1200 gray
+
+
+# --- tracking primitives ------------------------------------------------------
+
+def subpixel(res, x, y):
+    """Parabolic peak interpolation -- the asteroid centre between pixels."""
+    dx = dy = 0.0
+    if 0 < x < res.shape[1] - 1:
+        a, b, c = res[y, x - 1], res[y, x], res[y, x + 1]
+        d = a - 2 * b + c
+        if abs(d) > 1e-9:
+            dx = 0.5 * (a - c) / d
+    if 0 < y < res.shape[0] - 1:
+        a, b, c = res[y - 1, x], res[y, x], res[y + 1, x]
+        d = a - 2 * b + c
+        if abs(d) > 1e-9:
+            dy = 0.5 * (a - c) / d
+    return float(np.clip(dx, -1, 1)), float(np.clip(dy, -1, 1))
+
+
+def refine(gray, tmpl, cx, cy):
+    """Template match in a window around (cx, cy). Returns (x, y, score)."""
+    th, tw = tmpl.shape
+    H, W = gray.shape
+    x0 = int(np.clip(cx - SEARCH_R - tw // 2, 0, W - tw - 1))
+    y0 = int(np.clip(cy - SEARCH_R - th // 2, 0, H - th - 1))
+    x1 = int(np.clip(cx + SEARCH_R + tw // 2, tw + 1, W - 1))
+    y1 = int(np.clip(cy + SEARCH_R + th // 2, th + 1, H - 1))
+    win = gray[y0:y1, x0:x1]
+    if win.shape[0] <= th or win.shape[1] <= tw:
+        return cx, cy, 0.0
+    res = cv2.matchTemplate(win, tmpl, cv2.TM_CCOEFF_NORMED)
+    _, score, _, loc = cv2.minMaxLoc(res)
+    dx, dy = subpixel(res, loc[0], loc[1])
+    return (x0 + loc[0] + dx + tw / 2.0, y0 + loc[1] + dy + th / 2.0, float(score))
+
+
+def make_tracker(name):
+    if name == "csrt":
+        return cv2.TrackerCSRT_create()
+    if name == "kcf":
+        return cv2.TrackerKCF_create()
+    return cv2.TrackerMIL_create()
+
+
+def propose_seeds(corners_csv, epochs):
+    """Guess each epoch's start box from the method-1 corner annotations.
+
+    Only a starting hint -- you correct it with a click, and the tracker refines
+    from wherever you put it. Falls back to nothing when no annotations exist.
+    """
+    prop = {}
+    if corners_csv and corners_csv.exists():
+        c = pd.read_csv(corners_csv).sort_values("ts_ns").reset_index(drop=True)
+        quads = c[[f"{a}{n}" for n in range(4) for a in ("x", "y")]].to_numpy().reshape(-1, 4, 2)
+        dst = np.array(CORNER_GAME_XY, dtype=np.float32)
+        for ep, t0 in epochs.items():
+            i = int(np.argmin(np.abs(c["ts_ns"].to_numpy() - t0)))
+            H = cv2.getPerspectiveTransform(quads[i].astype(np.float32), dst)
+            pt = cv2.perspectiveTransform(
+                np.array([[[AST_SPAWN_X, AST_SPAWN_Y]]], dtype=np.float64),
+                np.linalg.inv(H)).reshape(2)
+            scale = np.linalg.norm(quads[i][1] - quads[i][0]) / 100.0
+            prop[ep] = (float(pt[0]), float(pt[1]), max(16, int(6.0 * scale)))
+    return prop
 
 
 # --- per-epoch state ----------------------------------------------------------
@@ -325,10 +407,11 @@ def main() -> None:
 
     frames_by_ep, t0_by_ep = {}, {}
     for ep, d in tl.groupby("EpochIndex"):
-        lo, hi = np.searchsorted(wts, [int(d["t_utc_ns"].min()), int(d["t_utc_ns"].max())])
+        t0 = int(d["t_utc_ns"].min())
+        lo, hi = np.searchsorted(wts, [t0, int(d["t_utc_ns"].max())])
         if hi - lo >= 30:
             frames_by_ep[int(ep)] = np.arange(lo, hi)
-            t0_by_ep[int(ep)] = lo
+            t0_by_ep[int(ep)] = t0        # ns, to pick the nearest rest annotation
 
     done = {}
     if TRACK_CSV.exists():
@@ -340,9 +423,7 @@ def main() -> None:
     cap = cv2.VideoCapture(str(SCENE_VIDEO))
     if not cap.isOpened():
         sys.exit("could not open scene video")
-    from pathlib import Path
-    prop = propose_seeds(Path("out_frame_annotate_method/corners.csv"),
-                         {e: 0 for e in frames_by_ep}, t0_by_ep)
+    prop = propose_seeds(Path("out_frame_annotate_method/corners.csv"), t0_by_ep)
 
     order = sorted(frames_by_ep)
     if args.epochs:
