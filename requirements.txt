@@ -1,0 +1,17 @@
+# Python 3.12 (developed on 3.12.14)
+#
+#   python3 -m venv .venv
+#   .venv/bin/pip install -r requirements.txt
+#
+# The run.sh scripts hardcode ../../.venv/bin/python, so the venv must live at
+# the repo root and be named .venv.
+#
+# Versions are pinned to the ones the committed figures were produced with.
+# opencv-contrib-python is the superset build; it is what supplies the CSRT /
+# KCF / MIL trackers that track_live.py uses. Do not also install
+# opencv-python -- the two conflict.
+
+numpy==2.5.2
+pandas==3.0.5
+matplotlib==3.11.1
+opencv-contrib-python==5.0.0.93
