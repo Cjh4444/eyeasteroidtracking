@@ -1,0 +1,9 @@
+{
+  "matlab_dir": "data/test_sarah_LB",
+  "neon_dir": "data/eyetracking_sarah/test_sarah_lb_eyetracking-9355240b",
+  "epoch_glob": "test_sarah_LB_20260818_170256_epoch_[0-9][0-9][0-9]_waveFreq_*.csv",
+  "epoch_summary": "test_sarah_LB_20260818_170256_epoch_summary.csv",
+  "config_csv": "USED_20260818_170256_lunar_config.csv",
+  "scene_video": "18795319_0.0-1118.231.mp4",
+  "timezone": "America/New_York"
+}

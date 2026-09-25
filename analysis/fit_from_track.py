@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from common import GAME_XLIM, GAME_YLIM, OUT
-from fit_mapping import camera_params, undistort
+from camera import camera_params, undistort
 from sync import load_gaze
 
 MIN_SCORE = 0.35
@@ -273,8 +273,9 @@ def main() -> None:
         sl, ic, nfit = params
         print(f"\nMATLAB/Neon clock drift: {sl*1000:+.1f} ms per epoch "
               f"(fitted on {nfit} consistent epochs)")
-        print(f"  offset {ic*1000:+.0f} ms at epoch 0 -> {(sl*42+ic)*1000:+.0f} ms at epoch 42"
-              f"  =  {(sl*41)*1000:+.0f} ms of drift across the session")
+        n_ep = int(timeline["EpochIndex"].max())
+        print(f"  offset {ic*1000:+.0f} ms at epoch 0 -> {(sl*n_ep+ic)*1000:+.0f} ms at epoch {n_ep}"
+              f"  =  {(sl*(n_ep-1))*1000:+.0f} ms of drift across the session")
         # Refit every epoch inside a narrow window around the model, which pulls
         # the stragglers onto the trend instead of letting them sit at an alias.
         mapped, rep = game_mapping(track, timeline, gaze, K, D, prior=model)

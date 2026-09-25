@@ -57,15 +57,69 @@ import pandas as pd
 
 import cv2
 
-from common import CORNER_GAME_XY, GAME_XLIM, GAME_YLIM, OUT, ROOT
-from compare_methods import m1_H_at, m1_quads
-from fit_from_track import MIN_SCORE
-from fit_hybrid import jacobian
-from fit_mapping import camera_params, undistort
+from camera import camera_params, undistort
+from common import FLOW, CORNER_GAME_XY, GAME_XLIM, GAME_YLIM, OUT
+from fit_from_track import MIN_SCORE, y_flipped
 from sync import load_gaze
 
-M1 = ROOT / "analysis" / "out_frame_annotate_method"
-M2 = ROOT / "analysis" / "out_track"
+M1 = FLOW / "out_frame_annotate_method"
+M2 = FLOW / "out_track"
+
+
+def rest_quads(K, D):
+    """The annotated rest-rectangle corners, undistorted, with their timestamps."""
+    c = pd.read_csv(M1 / "corners.csv").sort_values("ts_ns").reset_index(drop=True)
+    q = np.stack([undistort([(r[f"x{n}"], r[f"y{n}"]) for n in range(4)], K, D)
+                  for _, r in c.iterrows()])
+    return c["ts_ns"].to_numpy().astype(np.float64), q
+
+
+def quads_at(ts, anchor_t, anchor_q):
+    """Rest corners interpolated to arbitrary times (corners, not matrix entries,
+    interpolate sensibly under head motion)."""
+    out = np.empty((len(ts), 4, 2))
+    for ci in range(4):
+        for d in range(2):
+            out[:, ci, d] = np.interp(ts, anchor_t, anchor_q[:, ci, d])
+    return out
+
+
+def jacobian(H, pts):
+    """d(game)/d(pixel) at each point -- the 2x2 local linear part of H.
+
+    Using only this is the whole point: H's translation never enters, so an
+    absolute error in the mapping cannot bias the reconstructed offset.
+    """
+    p = np.asarray(pts, dtype=np.float64)
+    x, y = p[:, 0], p[:, 1]
+    w = H[2, 0] * x + H[2, 1] * y + H[2, 2]
+    gx = (H[0, 0] * x + H[0, 1] * y + H[0, 2]) / w
+    gy = (H[1, 0] * x + H[1, 1] * y + H[1, 2]) / w
+    J = np.empty((len(p), 2, 2))
+    J[:, 0, 0] = (H[0, 0] - gx * H[2, 0]) / w
+    J[:, 0, 1] = (H[0, 1] - gx * H[2, 1]) / w
+    J[:, 1, 0] = (H[1, 0] - gy * H[2, 0]) / w
+    J[:, 1, 1] = (H[1, 1] - gy * H[2, 1]) / w
+    return J
+
+
+def epoch_H(src, ts, d, off):
+    """Homography fitted across one epoch's asteroid track at a given clock offset.
+
+    NOT used for the mapping -- mid-trial head rotation corrupts it (see above).
+    refit_offsets.py uses it only to detect which epochs it corrupted.
+    """
+    dst = np.c_[np.interp(ts + off * 1e9, d["t_utc_ns"], d["Asteroid_X"],
+                          left=np.nan, right=np.nan),
+                np.interp(ts + off * 1e9, d["t_utc_ns"], d["Asteroid_Y"],
+                          left=np.nan, right=np.nan)]
+    k = np.isfinite(dst).all(1)
+    if k.sum() < 50:
+        return None
+    H, _ = cv2.findHomography(src[k], dst[k], cv2.RANSAC, 2.0)
+    if H is None or y_flipped(H):
+        return None
+    return H
 
 # DataAspectRatio [1 1 1] makes the true mapping isotropic, so J's singular
 # values must be equal. Allow a little slack for corner-click noise and genuine
@@ -85,7 +139,7 @@ def rest_J(ts, ast_px, anchor_t, anchor_q):
     One homography per tracked frame (a few hundred per epoch), evaluated at the
     asteroid's own pixel position so the local perspective is the right one.
     """
-    quads = m1_H_at(ts, anchor_t, anchor_q)
+    quads = quads_at(ts, anchor_t, anchor_q)
     dst = np.array(CORNER_GAME_XY, dtype=np.float32)
     J = np.empty((len(ts), 2, 2))
     for i in range(len(ts)):
@@ -161,7 +215,7 @@ def main() -> None:
     # LB_OFFSETS at refit_offsets.py's output to use the re-solved ones.
     src = os.environ.get("LB_OFFSETS")
     if src:
-        o = pd.read_csv(ROOT / "analysis" / src)
+        o = pd.read_csv(FLOW / src)
         offsets = dict(zip(o["epoch"], o["offset_final"]))
         print(f"clock offsets from {src}: " +
               ", ".join(f"{k}={v}" for k, v in o["source"].value_counts().items()))
@@ -169,7 +223,7 @@ def main() -> None:
         rep = pd.read_csv(M2 / "track_mapping_report.csv")
         offsets = dict(zip(rep["epoch"], rep["offset_s"]))
     gaze = load_gaze()
-    anchor_t, anchor_q = m1_quads(K, D)
+    anchor_t, anchor_q = rest_quads(K, D)
 
     OUT.mkdir(parents=True, exist_ok=True)
     for name in ("timeline.csv", "rest_windows.csv", "sync_per_epoch.csv",
@@ -177,6 +231,12 @@ def main() -> None:
         src = M2 / name
         if src.exists() and not (OUT / name).exists():
             (OUT / name).write_bytes(src.read_bytes())
+
+    # Record the offsets this mapping used, so plot.py aligns gaze on the SAME
+    # time base. (Method 4's plot.py always read method 2's offsets, even when
+    # LB_OFFSETS had mapped with the re-solved ones.)
+    pd.DataFrame(dict(epoch=list(offsets), offset_s=list(offsets.values()))).to_csv(
+        OUT / "offsets_used.csv", index=False)
 
     mapped, report = build(track, timeline, gaze, offsets, K, D, anchor_t, anchor_q)
     mapped.drop(columns=["epoch"]).to_csv(OUT / "gaze_mapped.csv", index=False)

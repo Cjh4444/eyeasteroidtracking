@@ -2,26 +2,34 @@
 import os
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-MATLAB_DIR = ROOT / "test_sarah_LB"
-NEON_DIR = ROOT / "test_sarah_lb_eyetracking-9355240b"
-# Each analysis method writes to its own output directory, so the two can be
-# compared side by side. Set LB_OUT to switch; the run_*.sh scripts do this.
-OUT = Path(__file__).resolve().parent / os.environ.get("LB_OUT", "out")
+from session import active
 
-CONFIG_CSV = MATLAB_DIR / "USED_20260818_170256_lunar_config.csv"
-EPOCH_SUMMARY = MATLAB_DIR / "test_sarah_LB_20260818_170256_epoch_summary.csv"
-EPOCH_GLOB = "test_sarah_LB_*_epoch_0*_waveFreq_*.csv"
+# Every path below comes from the session named by LB_SESSION (see session.py).
+SESSION = active()
+ROOT = Path(__file__).resolve().parent.parent
+# The session's own folder. Stage scripts read their inputs and write their
+# outputs relative to FLOW (e.g. FLOW / "out_track"), so each session is
+# self-contained exactly as a method-4 flow folder was.
+FLOW = SESSION.dir
+MATLAB_DIR = SESSION.matlab_dir
+NEON_DIR = SESSION.neon_dir
+# Each stage writes to its own output directory under the session; LB_OUT picks
+# which. lb.py sets it per stage.
+OUT = FLOW / os.environ.get("LB_OUT", "out")
+
+CONFIG_CSV = SESSION.config_csv
+EPOCH_SUMMARY = SESSION.epoch_summary
+EPOCH_GLOB = SESSION.epoch_glob
 
 GAZE_CSV = NEON_DIR / "gaze.csv"
 WORLD_TS_CSV = NEON_DIR / "world_timestamps.csv"
 SCENE_CAM_JSON = NEON_DIR / "scene_camera.json"
 IMU_CSV = NEON_DIR / "imu.csv"
 FIXATIONS_CSV = NEON_DIR / "fixations.csv"
-SCENE_VIDEO = NEON_DIR / "18795319_0.0-1118.231.mp4"
+SCENE_VIDEO = SESSION.scene_video or NEON_DIR / "scene_video_missing.mp4"
 
 # Wall clock the MATLAB box was running on. Neon stamps UTC ns.
-MATLAB_TZ = "America/New_York"
+MATLAB_TZ = SESSION.timezone
 
 # --- Game geometry, from Lunar_Blast_v4.m -------------------------------------
 # Axes limits (:52-53). The rest-screen fill (:439) spans exactly this region,

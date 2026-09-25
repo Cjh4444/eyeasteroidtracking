@@ -131,7 +131,7 @@ def main() -> None:
     print(f"per-epoch: {len(good)}/{len(per_df)} with r>0.5, "
           f"median {good['offset_s'].median()*1000:+.0f} ms, "
           f"IQR {(good['offset_s'].quantile(.75)-good['offset_s'].quantile(.25))*1000:.0f} ms")
-    print(f"drift slope: {slope*1000:+.2f} ms/epoch  (~{slope*1000*42:+.0f} ms over session)")
+    print(f"drift slope: {slope*1000:+.2f} ms/epoch  (~{slope*1000*len(eps):+.0f} ms over session)")
 
     per_df.to_csv(OUT / "sync_per_epoch.csv", index=False)
     json.dump(dict(offset_s=off, corr=r, corr_at_zero=corr_at(0.0, eps, gz),

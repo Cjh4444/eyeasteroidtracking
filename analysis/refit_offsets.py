@@ -77,14 +77,12 @@ import pandas as pd
 
 import cv2
 
-from common import CORNER_GAME_XY, ROOT
-from compare_methods import m1_H_at, m1_quads
+from camera import camera_params, undistort
+from common import FLOW
 from fit_from_track import MIN_SCORE, drift_model
-from fit_hybrid import epoch_H, jacobian
-from fit_hybrid2 import ANISOTROPY_MAX, anisotropy, rest_J
-from fit_mapping import camera_params, undistort
+from fit_hybrid2 import ANISOTROPY_MAX, anisotropy, epoch_H, jacobian
 
-ANALYSIS = ROOT / "analysis"
+ANALYSIS = FLOW
 M2 = ANALYSIS / "out_track"
 WINDOW = 0.35          # seconds either side of the drift line
 DETREND_ORDER = 1      # see below -- a LINE only
@@ -181,7 +179,6 @@ def main() -> None:
     track = pd.read_csv(M2 / "asteroid_track.csv")
     timeline = pd.read_csv(M2 / "timeline.csv")
     rep = pd.read_csv(M2 / "track_mapping_report.csv")
-    anchor_t, anchor_q = m1_quads(K, D)
 
     model, params = drift_model(rep)
     if model is None:
@@ -282,7 +279,7 @@ def main() -> None:
     print("  " + r["source"].value_counts().to_string().replace("\n", "\n  "))
 
     print(f"\nwrote {ANALYSIS/'offsets_refit.csv'}")
-    print("feed it to method 4 with:  LB_OFFSETS=offsets_refit.csv ./run_hybrid2.sh")
+    print("feed it to method 4 with:  LB_OFFSETS=offsets_refit.csv ./run.sh")
 
 
 if __name__ == "__main__":
