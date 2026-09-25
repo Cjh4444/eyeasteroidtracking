@@ -50,3 +50,22 @@ analysis/out_hybrid/
 analysis/out_hybrid2/
 analysis/out_frame_annotate_method/
 analysis/method2.zip
+
+# --- generalized pipeline (analysis/pipeline) -----------------------------------
+# Keep session.json and the two interactive artefacts per session; everything else
+# under a session is rebuilt by `lb.py run`.
+analysis/pipeline/sessions/*/*
+!analysis/pipeline/sessions/*/session.json
+!analysis/pipeline/sessions/*/out_frame_annotate_method/
+!analysis/pipeline/sessions/*/out_track/
+analysis/pipeline/sessions/*/out_frame_annotate_method/*
+analysis/pipeline/sessions/*/out_track/*
+!analysis/pipeline/sessions/*/out_frame_annotate_method/corners.csv
+!analysis/pipeline/sessions/*/out_track/asteroid_track.csv
+
+# raw data too large for git, pilot 3170
+eyetracking_3170/*/*.mp4
+eyetracking_3170/*/3d_eye_states.csv
+eyetracking_3170/*/imu.csv
+LB_pilot_3170.zip
+eyetracking_3170.zip

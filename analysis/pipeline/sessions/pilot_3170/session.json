@@ -1,0 +1,9 @@
+{
+  "matlab_dir": "LB_pilot_3170",
+  "neon_dir": "eyetracking_3170/lb_pilot_3170_eyetracking-a2c3d3dd",
+  "epoch_glob": "LB_pilot_3170_20260904_150331_epoch_[0-9][0-9][0-9]_waveFreq_*.csv",
+  "epoch_summary": "LB_pilot_3170_20260904_150331_epoch_summary.csv",
+  "config_csv": "USED_20260904_150331_lunar_config_2.csv",
+  "scene_video": "5b4bffcb_0.0-730.045.mp4",
+  "timezone": "America/New_York"
+}

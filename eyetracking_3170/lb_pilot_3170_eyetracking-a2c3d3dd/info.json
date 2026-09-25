@@ -1,0 +1,40 @@
+{
+    "android_device_id": "e4fc68e4a20196dd",
+    "android_device_model": "pa1qxeea",
+    "android_device_name": "Neon Companion",
+    "app_version": "2.9.47-prod",
+    "calib_version": 1,
+    "data_format_version": "2.6",
+    "duration": 730045000000,
+    "firmware_version": [
+        29,
+        8
+    ],
+    "frame_id": "10",
+    "frame_name": "Just act natural",
+    "gaze_frequency": 200,
+    "gaze_mode": "binocular",
+    "gaze_offset": [
+        0.0,
+        0.0
+    ],
+    "module_serial_number": "868382",
+    "os_version": "16",
+    "pipeline_version": "2.9.0",
+    "recording_id": "a2c3d3dd-30f7-4511-8288-d5c7edc7422d",
+    "start_time": 1788548578216000000,
+    "template_data": {
+        "data": {
+            "d8a59f15-9fd9-45db-b98e-ba4d338d173e": [
+                ""
+            ]
+        },
+        "id": "312d0e67-f798-482d-b8cd-890cce746ec2",
+        "recording_name": "2026-09-05_04:02:58",
+        "version": "2026-07-15T20:28:39.845105Z"
+    },
+    "wearer_id": "3ec5369a-18a7-42f1-877d-d57785de0cc8",
+    "wearer_ied": 63.0,
+    "wearer_name": "3170",
+    "workspace_id": "379af54a-3e93-4338-a2c1-bbb4738a52c2"
+}

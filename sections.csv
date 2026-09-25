@@ -1,0 +1,2 @@
+section id,recording id,recording name,wearer id,wearer name,section start time [ns],section end time [ns],start event name,end event name
+18795319-2246-4d26-8647-48c479d2ec82,9355240b-5adc-4d8a-a2e0-e3cca65bfda2,test_sarah_LB_eyetracking,b2cd6db3-d745-4cc1-b618-22e57a150073,Sarah,1787086968612000000,1787088086843000000,recording.begin,recording.end

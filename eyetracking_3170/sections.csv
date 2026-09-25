@@ -1,0 +1,2 @@
+section id,recording id,recording name,wearer id,wearer name,section start time [ns],section end time [ns],start event name,end event name
+5b4bffcb-62c3-4bc0-9be5-205b0c6d3b57,a2c3d3dd-30f7-4511-8288-d5c7edc7422d,LB_pilot_3170_eyetracking,3ec5369a-18a7-42f1-877d-d57785de0cc8,3170,1788548578216000000,1788549308261000000,recording.begin,recording.end
