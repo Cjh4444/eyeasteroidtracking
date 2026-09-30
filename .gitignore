@@ -19,7 +19,7 @@ data/**/imu.csv
 lunar_blast_-_prelim_GAZE-OVERLAY_*/
 
 # --- pipeline outputs ------------------------------------------------------------
-# Per session keep session.json and the two interactive artefacts; everything else
+# Per session keep session.json and the two interactive artifacts; everything else
 # under a session is rebuilt by `lb.py run` / `lb.py fit`.
 analysis/sessions/*/*
 !analysis/sessions/*/session.json

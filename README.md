@@ -6,22 +6,23 @@ Neon recordings of the Lunar Blast task.
 ## Quick start
 
 ```bash
-python3 -m venv .venv                        # must be at the repo root, named .venv
-.venv/bin/pip install -r requirements.txt
+uv venv --python 3.12                        # creates .venv at the repo root
+uv pip install -r requirements.txt
 
 cd analysis
-../.venv/bin/python lb.py list               # sessions and their progress
-../.venv/bin/python lb.py fit pilot_3170     # rebuild a session's figures
+uv run python lb.py list                     # sessions and their progress
+uv run python lb.py fit pilot_3170           # rebuild a session's figures
 ```
 
+`uv run` finds the repo-root `.venv` from any subfolder, so there's nothing to activate.
 Figures land in `analysis/sessions/<name>/out_hybrid2/figures/`.
 
 ## A new recording
 
 ```bash
 cd analysis
-../.venv/bin/python lb.py init <name> --matlab ../data/<matlab folder> --neon ../data/<neon export>
-../.venv/bin/python lb.py run  <name>        # repeat after each interactive stage
+uv run python lb.py init <name> --matlab ../data/<matlab folder> --neon ../data/<neon export>
+uv run python lb.py run  <name>              # repeat after each interactive stage
 ```
 
 `init` finds the files and checks the data. `run` walks you through the two

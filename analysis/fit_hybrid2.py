@@ -48,7 +48,7 @@ constraint, free to check, and it flags every epoch head motion has corrupted --
 in the same family as `y_flipped()`. `anisotropy()` below exposes it and
 `ANISOTROPY_MAX` rejects fits that violate it.
 
-Run:  LB_OUT=out_hybrid2 ../.venv/bin/python fit_hybrid2.py
+Run:  LB_OUT=out_hybrid2 uv run python fit_hybrid2.py
 """
 import os
 
@@ -61,6 +61,8 @@ from camera import camera_params, undistort
 from common import FLOW, CORNER_GAME_XY, GAME_XLIM, GAME_YLIM, OUT
 from fit_from_track import MIN_SCORE, y_flipped
 from sync import load_gaze
+
+GAZE_HZ = 200.0   # Neon gaze rate, for the expected sample count in epoch_quality.csv
 
 M1 = FLOW / "out_frame_annotate_method"
 M2 = FLOW / "out_track"
@@ -205,6 +207,56 @@ def build(track, timeline, gaze, offsets, K, D, anchor_t, anchor_q, perturb=0.0)
     return mapped, pd.DataFrame(report)
 
 
+def epoch_table(mapped, report, timeline, offsets):
+    """The analysis-ready export: one row per gaze sample, labelled by epoch, on the
+    stimulus time base, with the target beside it.
+
+    The alignment is the one plot.py draws: a gaze sample stamped ts_ns (Neon
+    clock) sits at ts_ns + offset on the MATLAB clock, and time in trial counts
+    from the epoch's first logged frame. target_* is the logged asteroid position
+    interpolated to that instant, so error_* is gaze minus target in game units.
+    """
+    rows, quality = [], []
+    ok = dict(zip(report["epoch"], report["ok"])) if len(report) else {}
+    for ep, d in timeline.groupby("EpochIndex"):
+        d = d.sort_values("t_utc_ns")
+        t0, t1 = d["t_utc_ns"].iloc[0], d["t_utc_ns"].iloc[-1]
+        dur = (t1 - t0) / 1e9
+        g = mapped[mapped["epoch"] == ep] if len(mapped) else mapped
+        if len(g) and ep in offsets:
+            ts = g["ts_ns"].to_numpy() + offsets[ep] * 1e9
+            keep = (ts >= t0) & (ts <= t1)
+            g, ts = g[keep], ts[keep]
+        else:
+            g, ts = g.iloc[:0], np.array([])
+        tx = np.interp(ts, d["t_utc_ns"], d["Asteroid_X"])
+        ty = np.interp(ts, d["t_utc_ns"], d["Asteroid_Y"])
+        t = (ts - t0) / 1e9
+        rows.append(pd.DataFrame(dict(
+            epoch=int(ep), condition=d["Condition"].iloc[0],
+            waveFreq=float(d["waveFreq"].iloc[0]), t_s=t, ts_ns=g["ts_ns"].to_numpy(),
+            target_x=tx, target_y=ty,
+            gaze_x=g["game_x"].to_numpy(), gaze_y=g["game_y"].to_numpy(),
+            error_x=g["game_x"].to_numpy() - tx, error_y=g["game_y"].to_numpy() - ty)))
+        # Coverage and gaps are reported apart. Mapped gaze stops where the
+        # asteroid track does, and track_live.py picks each epoch's frames from the
+        # uncorrected MATLAB times, so the track ends |offset| (0.3-1 s) before the
+        # trial does. That tail is missing by construction, not a data-quality
+        # problem. Within the mapped span, blinks and dropped samples are absent
+        # rows: pct_present and longest_gap_s measure those.
+        span = float(t[-1] - t[0]) if len(t) > 1 else 0.0
+        quality.append(dict(
+            epoch=int(ep), condition=d["Condition"].iloc[0],
+            waveFreq=float(d["waveFreq"].iloc[0]), duration_s=round(dur, 3),
+            mapped_from_s=round(float(t[0]), 3) if len(t) else np.nan,
+            mapped_to_s=round(float(t[-1]), 3) if len(t) else np.nan,
+            n_samples=len(t),
+            pct_present=round(100 * len(t) / (span * GAZE_HZ + 1), 1) if span else 0.0,
+            longest_gap_s=round(float(np.diff(t).max()), 3) if len(t) > 1 else np.nan,
+            mapping_ok=bool(ok.get(ep, False))))
+    return pd.concat(rows, ignore_index=True), pd.DataFrame(quality)
+
+
 def main() -> None:
     K, D = camera_params()
     track = pd.read_csv(M2 / "asteroid_track.csv")
@@ -239,8 +291,12 @@ def main() -> None:
         OUT / "offsets_used.csv", index=False)
 
     mapped, report = build(track, timeline, gaze, offsets, K, D, anchor_t, anchor_q)
-    mapped.drop(columns=["epoch"]).to_csv(OUT / "gaze_mapped.csv", index=False)
+    cols = ["epoch"] + [c for c in mapped.columns if c != "epoch"]
+    mapped[cols].to_csv(OUT / "gaze_mapped.csv", index=False)
     report.to_csv(OUT / "jacobian_report.csv", index=False)
+    samples, quality = epoch_table(mapped, report, timeline, offsets)
+    samples.to_csv(OUT / "gaze_target_by_epoch.csv", index=False)
+    quality.to_csv(OUT / "epoch_quality.csv", index=False)
 
     on = mapped["game_x"].between(*GAME_XLIM) & mapped["game_y"].between(*GAME_YLIM)
     print(f"reconstructed {len(mapped)} gaze samples over {mapped['epoch'].nunique()} epochs")
@@ -249,6 +305,8 @@ def main() -> None:
           f"max {report['anisotropy'].max():.3f}  "
           f"rejected {int((~report['ok']).sum())}/{len(report)}")
     print(f"\nwrote {OUT/'gaze_mapped.csv'}")
+    print(f"wrote {OUT/'gaze_target_by_epoch.csv'} ({len(samples)} samples) "
+          f"and {OUT/'epoch_quality.csv'}")
 
 
 if __name__ == "__main__":

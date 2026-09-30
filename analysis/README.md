@@ -8,11 +8,9 @@
 From `analysis/`:
 
 ```bash
-PY=../.venv/bin/python
-
-$PY lb.py init pilot_3170 --matlab ../data/LB_pilot_3170 --neon ../data/eyetracking_3170
-$PY lb.py run  pilot_3170      # stops at each interactive stage and prints the command
-                               # to run; after you finish it, run this again
+uv run python lb.py init pilot_3170 --matlab ../data/LB_pilot_3170 --neon ../data/eyetracking_3170
+uv run python lb.py run  pilot_3170      # stops at each interactive stage and prints the command
+                                         # to run; after you finish it, run this again
 ```
 
 `run` is safe to repeat. It does every automatic stage it can, then stops at the
@@ -31,6 +29,38 @@ skipped rests or epochs on purpose, `run --partial` fits with what's there.
 Figures land in `sessions/<name>/out_hybrid2/figures/`. **Check
 `sessions/<name>/out_hybrid2/jacobian_report.csv` first:** epochs with `ok=False`
 were rejected as anisotropic.
+
+## The results, for analysis
+
+Everything downstream should start from two files in `sessions/<name>/out_hybrid2/`:
+
+**`gaze_target_by_epoch.csv`**: one row per gaze sample (200 Hz), already split into
+epochs and aligned to the stimulus clock:
+
+| column | meaning |
+|---|---|
+| `epoch`, `condition`, `waveFreq` | trial number (= MATLAB `EpochIndex`), WATCHING/TRACKING, speed |
+| `t_s` | time in trial, s, from the epoch's first logged frame |
+| `ts_ns` | the sample's raw Neon timestamp, for joining back to `gaze_mapped.csv` |
+| `target_x`, `target_y` | logged asteroid position at that instant, game units (x 0–100, y 0–65) |
+| `gaze_x`, `gaze_y` | reconstructed gaze, same units |
+| `error_x`, `error_y` | gaze − target |
+
+Blinks and dropped samples are absent rows. Epochs rejected by `jacobian_report.csv`
+have no rows.
+
+**`epoch_quality.csv`**: one row per epoch, for choosing exclusions:
+
+| column | meaning |
+|---|---|
+| `duration_s` | trial length from the MATLAB log |
+| `mapped_from_s`, `mapped_to_s` | span with mapped gaze. It ends 0.3–1 s early because the asteroid track does ([below](#known-limitation-the-last-second-of-each-trial)) |
+| `n_samples`, `pct_present` | samples in that span, and as % of 200 Hz |
+| `longest_gap_s` | longest run of missing samples inside the span |
+| `mapping_ok` | `False` = rejected as anisotropic; no gaze for this epoch |
+
+`gaze_mapped.csv` is the same gaze unsplit, on the raw Neon clock, including
+samples outside the trials.
 
 Other commands: `lb.py list`, `status <name>`, `check <name>`.
 
@@ -78,7 +108,8 @@ annotate_corners.py corners: INTERACTIVE rest-corner annotation
 track_live.py      track:   INTERACTIVE supervised asteroid tracking
 fit_from_track.py  fit:     gaze vs tracked asteroid in degrees; per-epoch clock offsets
 refit_offsets.py   fit:     session clock model from the track's shape
-fit_hybrid2.py     fit:     the mapping -- gaze = asteroid path + J . (gaze_px - ast_px)
+fit_hybrid2.py     fit:     the mapping -- gaze = asteroid path + J . (gaze_px - ast_px);
+                            also writes the per-epoch export and quality table
 plot.py            fit:     per-epoch Y/X overlays and contact sheets
 sessions/<name>/
   session.json
@@ -93,7 +124,8 @@ sessions/<name>/
 `sessions/sarah_20260818` uses Sarah's original `corners.csv` and `asteroid_track.csv`.
 On it, this pipeline reproduces the original method-4 flow **exactly**: max abs
 difference 0.0 in `timeline.csv`, `rest_windows.csv`, `track_mapping_report.csv`,
-`offsets_refit.csv`, `jacobian_report.csv` and all 110,257 rows of `gaze_mapped.csv`.
+`offsets_refit.csv`, `jacobian_report.csv` and all 110,257 rows of `gaze_mapped.csv`
+(which has since gained a leading `epoch` column; the other columns are unchanged).
 The global clock model comes out at the documented −1049.9 ms / +602.0 ppm / +29.8 ms.
 This was re-checked after the repo cleanup. The original flow folders (methods 1–4)
 are in git history at commit `a10f121`.
@@ -109,6 +141,15 @@ Three deliberate differences from the original flow:
    `--offsets method2` gives the old default.
 3. **Contact sheets size to the session** (6 columns × as many rows as needed), where
    they used to be a fixed 7×6.
+
+## Known limitation: the last second of each trial
+
+`track_live.py` picks each epoch's video frames from the MATLAB epoch times with no
+clock correction (`frames_by_ep`). The MATLAB and Neon clocks differ by the per-epoch
+offset, so the track, and with it the mapped gaze, stops |offset| before the trial ends.
+That's 0.4–1.05 s on Sarah's session and ~0.27 s on 3170. The figures show it too:
+the orange line stops short of 14 s. Fixing it means widening that window by the
+offset and re-tracking the tail of every epoch.
 
 ## Notes on pilot 3170
 

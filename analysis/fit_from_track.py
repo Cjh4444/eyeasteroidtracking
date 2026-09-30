@@ -13,8 +13,11 @@ mid-trial head motion had to be interpolated between rest anchors that are up to
 Pixel error is converted to degrees of visual angle via the scene-camera
 intrinsics, which is the interpretable unit for eye-tracking accuracy.
 
-Emits <LB_OUT>/gaze_vs_asteroid.csv and <LB_OUT>/gaze_mapped.csv (the latter for
-plot.py, in game units, via a per-epoch homography fitted from the track itself).
+Emits <LB_OUT>/gaze_vs_asteroid.csv, pursuit_lag.csv and track_mapping_report.csv.
+The last holds the per-epoch MATLAB->Neon clock offsets, solved by fitting a
+per-epoch homography to the track; refit_offsets.py and fit_hybrid2.py read them.
+The gaze that homography maps is discarded: method 4 (fit_hybrid2.py) writes the
+session's only gaze_mapped.csv.
 """
 import json
 
@@ -22,7 +25,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from common import GAME_XLIM, GAME_YLIM, OUT
+from common import OUT
 from camera import camera_params, undistort
 from sync import load_gaze
 
@@ -267,7 +270,7 @@ def main() -> None:
         agg = gl.groupby(by)["lag_s"].agg(n="size", ms=lambda s: round(s.median() * 1000))
         print(f"  by {by}: " + "  ".join(f"{i}={r.ms:+.0f}ms" for i, r in agg.iterrows()))
 
-    mapped, rep = game_mapping(track, timeline, gaze, K, D)
+    _, rep = game_mapping(track, timeline, gaze, K, D)
     model, params = drift_model(rep)
     if model is not None:
         sl, ic, nfit = params
@@ -278,7 +281,7 @@ def main() -> None:
               f"  =  {(sl*(n_ep-1))*1000:+.0f} ms of drift across the session")
         # Refit every epoch inside a narrow window around the model, which pulls
         # the stragglers onto the trend instead of letting them sit at an alias.
-        mapped, rep = game_mapping(track, timeline, gaze, K, D, prior=model)
+        _, rep = game_mapping(track, timeline, gaze, K, D, prior=model)
     if len(rep):
         print(f"\nper-epoch homography fitted from the track "
               f"({rep['n'].sum()} correspondences, {rep['inliers'].sum()} inliers):")
@@ -289,11 +292,7 @@ def main() -> None:
               f"IQR {o.quantile(.25):+.0f}..{o.quantile(.75):+.0f}, "
               f"range {o.min():+.0f}..{o.max():+.0f} ms")
         rep.to_csv(OUT / "track_mapping_report.csv", index=False)
-    if len(mapped):
-        mapped.to_csv(OUT / "gaze_mapped.csv", index=False)
-        on = (mapped["game_x"].between(*GAME_XLIM) & mapped["game_y"].between(*GAME_YLIM))
-        print(f"  gaze inside the game area: {on.mean()*100:.1f}%")
-        print(f"\nwrote {OUT/'gaze_mapped.csv'}")
+        print(f"\nwrote {OUT/'track_mapping_report.csv'}")
     print(f"wrote {OUT/'gaze_vs_asteroid.csv'}")
 
 
